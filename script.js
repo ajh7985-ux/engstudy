@@ -49,11 +49,17 @@ const playSound = (type) => {
 };
 
 const speak = (text) => {
-    if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        speechSynthesis.speak(utterance);
-    }
+    //if ('speechSynthesis' in window) {
+    //    const utterance = new SpeechSynthesisUtterance(text);
+    //    utterance.lang = 'en-US';
+    //    speechSynthesis.speak(utterance);
+    //}
+
+    // 구글 TTS 엔진 주소 활용 (속도 조절 가능)
+    const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=tw-ob`;
+
+    const audio = new Audio(audioUrl);
+    audio.play();
 };
 
 // Utils
@@ -725,3 +731,4 @@ const getKoreanLevel = (level) => {
         default: return level;
     }
 };
+
