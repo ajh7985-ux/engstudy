@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English Vocab Master</title>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="background-animation"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <h1>English Vocab Master</h1>
+        </header>
+
+        <!-- Use a main container with relative positioning for screen transitions if needed, 
+             or just show/hide divs -->
+        <main id="main-content">
+
+            <!-- 1. Difficulty Selection -->
+            <section id="welcome-screen" class="screen active">
+                <div class="card glass">
+                    <h2>난이도를 선택하세요</h2>
+                    <p>자신의 실력에 맞는 단어를 학습하고 테스트해보세요.</p>
+                    <div class="difficulty-buttons">
+                        <button class="btn primary" data-level="easy">
+                            <span class="btn-title">초급</span>
+                            <span class="btn-desc">초급(Elementary, A1-A2 레벨<br>(원어민 수준의 초급 어휘)</span>
+                        </button>
+                        <button class="btn secondary" data-level="medium">
+                            <span class="btn-title">중급</span>
+                            <span class="btn-desc">중급(Intermediate, B1-B2 레벨)<br>(원어민 수준의 중급 어휘)</span>
+                        </button>
+                        <button class="btn accent" data-level="hard">
+                            <span class="btn-title">고급</span>
+                            <span class="btn-desc">고급 어휘(C1-C2 레벨 및 GRE/SAT 수준)<br>(원어민 수준의 고급 어휘)</span>
+                        </button>
+                    </div>
+
+                    <div class="extra-actions">
+                        <button id="btn-view-history" class="btn outline small-text">📊 나의 기록 보기</button>
+                        <button id="btn-view-mastered" class="btn outline small-text">🏆 완벽 암기 단어장</button>
+                        <button id="btn-view-incorrect" class="btn outline small-text"
+                            style="border-color: #ff6b6b; color: #ff6b6b;">💔 오답노트</button>
+                        <button id="btn-reset-data" class="btn outline small-text"
+                            style="border-color: #999; color: #ccc; margin-top: 0.5rem; width: 100%;">⚠️ 데이터
+                            초기화</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Learning Screen -->
+            <section id="learning-screen" class="screen hidden">
+                <div class="card glass large-card">
+                    <div class="learning-header">
+                        <h2>단어 학습</h2>
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <span id="learning-progress">1 / 20</span>
+                            <button id="btn-learning-back" class="btn icon-btn small-btn" title="나가기">✕</button>
+                        </div>
+                    </div>
+
+                    <div class="mastery-check-area"
+                        style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                        <span class="check-label" style="font-size: 0.9rem; color: rgba(255,255,255,0.7);">암기체크</span>
+                        <div class="checkbox-group" style="display: flex; gap: 8px;">
+                            <div class="custom-checkbox" data-index="1"></div>
+                            <div class="custom-checkbox" data-index="2"></div>
+                            <div class="custom-checkbox" data-index="3"></div>
+                        </div>
+                    </div>
+
+                    <div class="word-display-area">
+                        <h1 id="learn-word">Apple</h1>
+                        <button id="btn-speak" class="icon-btn" title="듣기">🔊</button>
+                    </div>
+
+                    <div class="meaning-area">
+                        <p id="learn-meaning" class="blur-text">사과</p>
+                        <p class="hint-text">클릭해서 뜻 확인하기</p>
+                    </div>
+
+                    <div class="controls">
+                        <button id="btn-prev" class="btn outline" disabled>이전</button>
+                        <button id="btn-next" class="btn outline">다음</button>
+                    </div>
+
+                    <div class="action-area">
+                        <button id="btn-start-test" class="btn primary full-width">테스트 시작하기</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Quiz Screen -->
+            <section id="quiz-screen" class="screen hidden">
+                <div class="card glass large-card">
+                    <div class="quiz-header">
+                        <div class="progress-bar-container">
+                            <div id="quiz-progress-bar" class="progress-bar"></div>
+                        </div>
+                        <span id="quiz-count">1 / 20</span>
+                        <button id="btn-quit" class="btn icon-btn small-btn" title="나가기">✕</button>
+                    </div>
+
+                    <div class="question-area">
+                        <h2 id="quiz-word">Apple</h2>
+                        <button id="quiz-speak" class="icon-btn small">🔊</button>
+                    </div>
+
+                    <div id="options-container" class="options-grid">
+                        <!-- Options will be injected here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. Result Screen -->
+            <section id="result-screen" class="screen hidden">
+                <div class="card glass text-center scrollable-card">
+                    <h2>테스트 결과</h2>
+
+                    <div id="result-score-area">
+                        <div class="score-circle">
+                            <span id="final-score">85</span>
+                            <span class="score-label">점</span>
+                        </div>
+                        <p id="result-message">참 잘했어요!</p>
+                        <p id="result-detail">20문제 중 17문제 정답</p>
+                    </div>
+
+                    <div class="filter-buttons"
+                        style="margin-bottom: 1rem; display: flex; justify-content: center; gap: 0.5rem;">
+                        <button class="btn small-btn filter-btn active" data-filter="easy">초급</button>
+                        <button class="btn small-btn filter-btn" data-filter="medium">중급</button>
+                        <button class="btn small-btn filter-btn" data-filter="hard">고급</button>
+                    </div>
+
+                    <div class="chart-container">
+                        <canvas id="scoreChart"></canvas>
+                    </div>
+
+                    <button id="btn-restart" class="btn primary">메인으로 돌아가기</button>
+                </div>
+            </section>
+
+            <!-- 5. Mastered Words Screen -->
+            <section id="mastered-screen" class="screen hidden">
+                <div class="card glass scrollable-card">
+                    <div class="mastered-header">
+                        <h2>완벽 암기 단어장 🏆</h2>
+                        <button id="btn-mastered-back" class="btn icon-btn small-btn">✕</button>
+                    </div>
+                    <p class="text-center" style="margin-bottom: 1rem; font-size: 0.9rem;">3번 이상 정답을 맞춘 단어들입니다.</p>
+
+                    <div id="mastered-list" class="mastered-grid">
+                        <!-- Items injected here -->
+                    </div>
+
+                    <div id="no-mastered-msg" class="text-center hidden">
+                        <p>아직 마스터한 단어가 없습니다.<br>열심히 학습해보세요!</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 6. Incorrect Note Screen -->
+            <section id="incorrect-note-screen" class="screen hidden">
+                <div class="card glass scrollable-card">
+                    <div class="mastered-header">
+                        <h2>💔 오답노트</h2>
+                        <button id="btn-incorrect-back" class="btn icon-btn small-btn">✕</button>
+                    </div>
+                    <p class="text-center" style="margin-bottom: 1rem; font-size: 0.9rem;">
+                        오답노트에서 3번 연속 정답을 맞추면 목록에서 사라집니다.
+                    </p>
+
+                    <div id="incorrect-list-area" class="mastered-grid">
+                        <!-- Items injected here -->
+                    </div>
+
+                    <div id="no-incorrect-msg" class="text-center hidden">
+                        <p>오답 단어가 없습니다.<br>완벽하시네요! 🎉</p>
+                    </div>
+
+                    <div class="action-area" style="margin-top: 1.5rem;">
+                        <button id="btn-start-incorrect-test" class="btn primary full-width">오답 단어만 테스트하기</button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Load Data and Script -->
+    <script src="data.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
