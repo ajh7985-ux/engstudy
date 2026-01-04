@@ -49,11 +49,29 @@ const playSound = (type) => {
 };
 
 const speak = (text) => {
-    if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        speechSynthesis.speak(utterance);
+    //if ('speechSynthesis' in window) {
+    //    const utterance = new SpeechSynthesisUtterance(text);
+    //    utterance.lang = 'en-US';
+    //    speechSynthesis.speak(utterance);
+    //}
+
+    // 1. 기존 재생 중인 음성 모두 정지
+    if (window.currentAudio) {
+        window.currentAudio.pause();
     }
+
+    // 2. 구글 고품질 음성 URL 생성 (미국 영어: tl=en)
+    // q: 단어, tl: 언어, client: 브라우저 속성
+    const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=tw-ob`;
+
+    // 3. 오디오 객체 생성 및 재생
+    const audio = new Audio(audioUrl);
+    window.currentAudio = audio; // 전역 변수에 저장하여 중복 재생 방지
+
+    audio.play().catch(e => {
+        console.error("음성 재생 실패:", e);
+        // 모바일 브라우저의 보안 정책상 첫 재생은 사용자의 터치가 필요할 수 있습니다.
+    });
 };
 
 // Utils
