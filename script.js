@@ -424,7 +424,11 @@ const handleAnswer = (selected, target, btnElement) => {
         playSound('correct');
         btnElement.classList.add('correct');
         quizScore++;
-        updateMastery(target.word);
+
+        // Only update mastery in regular mode
+        if (!isIncorrectQuizMode) {
+            updateMastery(target.word);
+        }
     } else {
         playSound('wrong');
         btnElement.classList.add('wrong');
@@ -613,9 +617,8 @@ const startIncorrectQuiz = () => {
     isIncorrectQuizMode = true;
     const incorrectData = getIncorrectData();
     const words = Object.keys(incorrectData);
-
-    // Convert to word objects
-    let pool = wordData.filter(w => words.includes(w.word));
+    // Convert to word objects (ensure unique words by using find like showIncorrectNoteView)
+    let pool = words.map(wordText => wordData.find(item => item.word === wordText)).filter(w => w);
 
     if (pool.length === 0) return; // Should not be accessible
 
@@ -698,7 +701,8 @@ const updateIncorrectProgress = (word, isCorrect) => {
         data[word]++;
         if (data[word] >= 3) {
             delete data[word]; // Graduate!
-            // Optional: maybe show toast?
+            // Reset mastery to 0 so it appears in Learning Phase again
+            setMastery(word, 0);
         }
         localStorage.setItem('vocabAppIncorrect', JSON.stringify(data));
     }
