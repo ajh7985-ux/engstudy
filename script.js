@@ -60,30 +60,49 @@ if ('speechSynthesis' in window) {
 }
 
 const speak = (text) => {
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
+    if (!('speechSynthesis' in window)) return;
 
+    // Refresh voices if empty (common on Android Chrome)
+    if (speechVoices.length === 0) {
+        speechVoices = window.speechSynthesis.getVoices();
+    }
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    // Small delay before speak to avoid bugs in some Android browsers where cancel() and speak() are called too close
+    setTimeout(() => {
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
 
-        const usVoices = speechVoices.filter(v => v.lang.includes('en-US'));
-        if (usVoices.length > 0) {
-            const bestVoice = usVoices.find(v =>
+        // Normalize language string for better filtering
+        const normalizeLang = (l) => l.toLowerCase().replace('_', '-');
+
+        // Target English voices
+        const englishVoices = speechVoices.filter(v =>
+            normalizeLang(v.lang).includes('en-us') ||
+            normalizeLang(v.lang).includes('en-gb')
+        );
+
+        if (englishVoices.length > 0) {
+            // Priority: Premium/Natural/Google/Samsung voices
+            const bestVoice = englishVoices.find(v =>
                 v.name.includes('Premium') ||
                 v.name.includes('Enhanced') ||
                 v.name.includes('Natural') ||
-                v.name.includes('Samantha') ||
-                v.name.includes('Google')
-            ) || usVoices[0];
+                v.name.includes('Google') ||
+                v.name.includes('Samsung') ||
+                v.name.includes('Samantha')
+            ) || englishVoices[0];
 
             utterance.voice = bestVoice;
         }
 
+        utterance.lang = 'en-US';
         utterance.rate = 0.95;
         utterance.pitch = 1.0;
 
         window.speechSynthesis.speak(utterance);
-    }
+    }, 50);
 };
 
 // Utils
