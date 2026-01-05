@@ -48,11 +48,41 @@ const playSound = (type) => {
     }
 };
 
+let speechVoices = [];
+
+const initVoices = () => {
+    speechVoices = window.speechSynthesis.getVoices();
+};
+
+if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = initVoices;
+    initVoices();
+}
+
 const speak = (text) => {
     if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'en-US';
-        speechSynthesis.speak(utterance);
+
+        const usVoices = speechVoices.filter(v => v.lang.includes('en-US'));
+        if (usVoices.length > 0) {
+            const bestVoice = usVoices.find(v =>
+                v.name.includes('Premium') ||
+                v.name.includes('Enhanced') ||
+                v.name.includes('Natural') ||
+                v.name.includes('Samantha') ||
+                v.name.includes('Google')
+            ) || usVoices[0];
+
+            utterance.voice = bestVoice;
+        }
+
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+
+        window.speechSynthesis.speak(utterance);
     }
 };
 
