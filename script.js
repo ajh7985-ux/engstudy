@@ -49,6 +49,8 @@ const playSound = (type) => {
 };
 
 let speechVoices = [];
+let currentUtterance = null; // Global reference to prevent GC on Android
+
 
 const initVoices = () => {
     speechVoices = window.speechSynthesis.getVoices();
@@ -67,42 +69,58 @@ const speak = (text) => {
         speechVoices = window.speechSynthesis.getVoices();
     }
 
+    // Samsung/Android fix: Always resume before speaking to clear any stuck state
+    window.speechSynthesis.resume();
+
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
 
-    // Small delay before speak to avoid bugs in some Android browsers where cancel() and speak() are called too close
+    // Small delay before speak (essential for some Android versions)
     setTimeout(() => {
-        const utterance = new SpeechSynthesisUtterance(text);
+        currentUtterance = new SpeechSynthesisUtterance(text);
 
-        // Normalize language string for better filtering
+        // Normalize language string
         const normalizeLang = (l) => l.toLowerCase().replace('_', '-');
 
         // Target English voices
-        const englishVoices = speechVoices.filter(v =>
+        let englishVoices = speechVoices.filter(v =>
             normalizeLang(v.lang).includes('en-us') ||
             normalizeLang(v.lang).includes('en-gb')
         );
 
-        if (englishVoices.length > 0) {
-            // Priority: Premium/Natural/Google/Samsung voices
-            const bestVoice = englishVoices.find(v =>
-                v.name.includes('Premium') ||
-                v.name.includes('Enhanced') ||
-                v.name.includes('Natural') ||
-                v.name.includes('Google') ||
-                v.name.includes('Samsung') ||
-                v.name.includes('Samantha')
-            ) || englishVoices[0];
-
-            utterance.voice = bestVoice;
+        // Fallback if no specific English voices found, just use default
+        if (englishVoices.length === 0) {
+            englishVoices = speechVoices.filter(v => normalizeLang(v.lang).startsWith('en'));
         }
 
-        utterance.lang = 'en-US';
-        utterance.rate = 0.95;
-        utterance.pitch = 1.0;
+        if (englishVoices.length > 0) {
+            // Priority: Samsung voices (for Samsung phones), then Google, then others
+            const bestVoice = englishVoices.find(v => v.name.includes('Samsung')) ||
+                englishVoices.find(v => v.name.includes('Google')) ||
+                englishVoices.find(v => v.name.includes('Premium')) ||
+                englishVoices.find(v => v.name.includes('Enhanced')) ||
+                englishVoices.find(v => v.name.includes('Natural')) ||
+                englishVoices.find(v => v.name.includes('Samantha')) ||
+                englishVoices[0];
 
-        window.speechSynthesis.speak(utterance);
-    }, 50);
+            currentUtterance.voice = bestVoice;
+        }
+
+        currentUtterance.lang = 'en-US';
+        currentUtterance.rate = 0.95;
+        currentUtterance.pitch = 1.0;
+
+        // Prevent GC during speech
+        currentUtterance.onend = () => {
+            currentUtterance = null;
+        };
+        currentUtterance.onerror = (e) => {
+            console.error('SpeechSynthesis error:', e);
+            currentUtterance = null;
+        };
+
+        window.speechSynthesis.speak(currentUtterance);
+    }, 100); // 100ms delay for better reliability on Samsung
 };
 
 // Utils
