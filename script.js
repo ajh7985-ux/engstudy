@@ -48,79 +48,28 @@ const playSound = (type) => {
     }
 };
 
-let speechVoices = [];
-let currentUtterance = null; // Global reference to prevent GC on Android
-
-
-const initVoices = () => {
-    speechVoices = window.speechSynthesis.getVoices();
-};
-
-if ('speechSynthesis' in window) {
-    window.speechSynthesis.onvoiceschanged = initVoices;
-    initVoices();
-}
+// Google TTS will be used for consistent pronunciation
+let currentAudio = null;
 
 const speak = (text) => {
-    if (!('speechSynthesis' in window)) return;
+    try {
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+        }
 
-    // Refresh voices if empty (common on Android Chrome)
-    if (speechVoices.length === 0) {
-        speechVoices = window.speechSynthesis.getVoices();
+        // Use Google Translate TTS for high-quality, consistent pronunciation (Free version)
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=tw-ob`;
+
+        currentAudio = new Audio(url);
+        currentAudio.play().catch(e => {
+            console.error('TTS Play failed:', e);
+            // Fallback for some browsers if blocked
+            window.open(url, '_blank');
+        });
+    } catch (e) {
+        console.error('Speak error:', e);
     }
-
-    // Samsung/Android fix: Always resume before speaking to clear any stuck state
-    window.speechSynthesis.resume();
-
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
-
-    // Small delay before speak (essential for some Android versions)
-    setTimeout(() => {
-        currentUtterance = new SpeechSynthesisUtterance(text);
-
-        // Normalize language string
-        const normalizeLang = (l) => l.toLowerCase().replace('_', '-');
-
-        // Target English voices
-        let englishVoices = speechVoices.filter(v =>
-            normalizeLang(v.lang).includes('en-us') ||
-            normalizeLang(v.lang).includes('en-gb')
-        );
-
-        // Fallback if no specific English voices found, just use default
-        if (englishVoices.length === 0) {
-            englishVoices = speechVoices.filter(v => normalizeLang(v.lang).startsWith('en'));
-        }
-
-        if (englishVoices.length > 0) {
-            // Priority: Samsung voices (for Samsung phones), then Google, then others
-            const bestVoice = englishVoices.find(v => v.name.includes('Samsung')) ||
-                englishVoices.find(v => v.name.includes('Google')) ||
-                englishVoices.find(v => v.name.includes('Premium')) ||
-                englishVoices.find(v => v.name.includes('Enhanced')) ||
-                englishVoices.find(v => v.name.includes('Natural')) ||
-                englishVoices.find(v => v.name.includes('Samantha')) ||
-                englishVoices[0];
-
-            currentUtterance.voice = bestVoice;
-        }
-
-        currentUtterance.lang = 'en-US';
-        currentUtterance.rate = 0.95;
-        currentUtterance.pitch = 1.0;
-
-        // Prevent GC during speech
-        currentUtterance.onend = () => {
-            currentUtterance = null;
-        };
-        currentUtterance.onerror = (e) => {
-            console.error('SpeechSynthesis error:', e);
-            currentUtterance = null;
-        };
-
-        window.speechSynthesis.speak(currentUtterance);
-    }, 100); // 100ms delay for better reliability on Samsung
 };
 
 // Utils
