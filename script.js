@@ -7,6 +7,7 @@ const screens = {
     mastered: document.getElementById('mastered-screen'),
     incorrect: document.getElementById('incorrect-note-screen')
 };
+const ttsAudio = document.getElementById('tts-audio');
 
 // State
 let currentLevel = 'easy';
@@ -20,70 +21,80 @@ let isIncorrectQuizMode = false; // Flag for special quiz mode
 // Sound Effects
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-const playSound = (type) => {
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
+const playSound = async (type) => {
+    try {
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
 
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
 
-    if (type === 'correct') {
-        // Ding (High pitch sine)
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.1);
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-        oscillator.start();
-        oscillator.stop(audioContext.currentTime + 0.5);
-    } else if (type === 'wrong') {
-        // Beep (Low pitch saw/square)
-        oscillator.type = 'sawtooth';
-        oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-        oscillator.frequency.linearRampToValueAtTime(100, audioContext.currentTime + 0.3);
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-        oscillator.start();
-        oscillator.stop(audioContext.currentTime + 0.3);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        if (type === 'correct') {
+            // Ding
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.1);
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.5);
+        } else if (type === 'wrong') {
+            // Beep
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+            oscillator.frequency.linearRampToValueAtTime(100, audioContext.currentTime + 0.3);
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.3);
+        }
+    } catch (e) {
+        console.error('AudioContext error:', e);
     }
 };
 
 // Google TTS will be used for consistent pronunciation
 let currentAudio = null;
 
-const speak = (text) => {
+const speak = async (text) => {
     try {
-        if (currentAudio) {
-            currentAudio.pause();
-            currentAudio = null;
+        // Resume context on user gesture
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
         }
 
-        // 1. Try Google TTS with a more reliable client ID and domain
-        const googleTtsUrl = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=gtx`;
+        if (ttsAudio) {
+            ttsAudio.pause();
+            ttsAudio.src = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=gtx`;
 
-        currentAudio = new Audio(googleTtsUrl);
-        currentAudio.play().catch(e => {
-            console.warn('Google TTS failed, trying Web Speech API:', e);
-
-            // 2. Fallback to Web Speech API (Native browser TTS)
-            if ('speechSynthesis' in window) {
-                // Cancel any ongoing speech
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'en-US';
-                // Try to find a nice English voice
-                const voices = window.speechSynthesis.getVoices();
-                const englishVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google')) || voices.find(v => v.lang.startsWith('en'));
-                if (englishVoice) utterance.voice = englishVoice;
-
-                window.speechSynthesis.speak(utterance);
-            } else {
-                console.error('Web Speech API not supported, opening URL in new window.');
-                window.open(googleTtsUrl, '_blank');
-            }
-        });
+            ttsAudio.play().catch(e => {
+                console.warn('Google TTS element play failed, trying Web Speech API:', e);
+                fallbackSpeak(text);
+            });
+        } else {
+            fallbackSpeak(text);
+        }
     } catch (e) {
         console.error('Speak error:', e);
+    }
+};
+
+const fallbackSpeak = (text) => {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        const voices = window.speechSynthesis.getVoices();
+        const englishVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google')) || voices.find(v => v.lang.startsWith('en'));
+        if (englishVoice) utterance.voice = englishVoice;
+        window.speechSynthesis.speak(utterance);
+    } else {
+        const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=gtx`;
+        window.open(url, '_blank');
     }
 };
 
@@ -115,6 +126,14 @@ const showScreen = (screenName) => {
 // --- Initialization ---
 document.querySelectorAll('.difficulty-buttons .btn').forEach(btn => {
     btn.addEventListener('click', () => {
+        // Sound Unlock for Mobile
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+        if (ttsAudio) {
+            ttsAudio.play().then(() => ttsAudio.pause()).catch(() => { });
+        }
+
         currentLevel = btn.dataset.level;
         startLearningPhase();
     });
