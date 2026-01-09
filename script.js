@@ -58,14 +58,29 @@ const speak = (text) => {
             currentAudio = null;
         }
 
-        // Use Google Translate TTS for high-quality, consistent pronunciation (Free version)
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=tw-ob`;
+        // 1. Try Google TTS with a more reliable client ID and domain
+        const googleTtsUrl = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=gtx`;
 
-        currentAudio = new Audio(url);
+        currentAudio = new Audio(googleTtsUrl);
         currentAudio.play().catch(e => {
-            console.error('TTS Play failed:', e);
-            // Fallback for some browsers if blocked
-            window.open(url, '_blank');
+            console.warn('Google TTS failed, trying Web Speech API:', e);
+
+            // 2. Fallback to Web Speech API (Native browser TTS)
+            if ('speechSynthesis' in window) {
+                // Cancel any ongoing speech
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                // Try to find a nice English voice
+                const voices = window.speechSynthesis.getVoices();
+                const englishVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google')) || voices.find(v => v.lang.startsWith('en'));
+                if (englishVoice) utterance.voice = englishVoice;
+
+                window.speechSynthesis.speak(utterance);
+            } else {
+                console.error('Web Speech API not supported, opening URL in new window.');
+                window.open(googleTtsUrl, '_blank');
+            }
         });
     } catch (e) {
         console.error('Speak error:', e);
