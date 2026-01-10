@@ -18,6 +18,7 @@ let quizQuestions = []; // Array of { wordObj, options }
 let isIncorrectQuizMode = false; // Flag for special quiz mode
 
 // Sound Effects
+let currentAudio = null;
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
 const playSound = (type) => {
@@ -48,32 +49,33 @@ const playSound = (type) => {
     }
 };
 
-let currentAudio = null;
-
 const speak = (text) => {
-    // 1. Stop any existing browser TTS (just in case)
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-    }
-
-    // 2. Stop any currently playing audio file (prevent overlapping)
+    // 1. Stop any currently playing audio
     if (currentAudio) {
         currentAudio.pause();
         currentAudio.currentTime = 0;
     }
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
 
-    // 3. Create new Audio object with Google TTS URL
+    // 2. Use Youdao Dictionary US English Audio (Direct URL, works on file://)
+    // type=0: US, type=1: UK
     const encodedText = encodeURIComponent(text);
-    // client=tw-ob is the public endpoint used by Google Translate
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodedText}`;
+    const url = `https://dict.youdao.com/dictvoice?type=0&audio=${encodedText}`;
 
     currentAudio = new Audio(url);
 
-    // 4. Play
+    // 3. Play with Fallback
     currentAudio.play().catch(e => {
-        console.error("Audio playback failed:", e);
-        // Optional: Alert the user if it fails (e.g. no internet)
-        // alert("오디오 재생 실패. 인터넷 연결을 확인해주세요.");
+        console.warn("Audio stream failed, switching to local backup:", e);
+        // Fallback to local SpeechSynthesis if offline or blocked
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            utterance.rate = 1.0;
+            window.speechSynthesis.speak(utterance);
+        }
     });
 };
 
