@@ -59,10 +59,10 @@ const speak = (text) => {
         window.speechSynthesis.cancel();
     }
 
-    // 2. Use Youdao Dictionary US English Audio (Direct URL, works on file://)
-    // type=0: US, type=1: UK
+    // 2. Use Google Translate TTS (US English)
+    // client=tw-ob allows access without captcha
     const encodedText = encodeURIComponent(text);
-    const url = `https://dict.youdao.com/dictvoice?type=0&audio=${encodedText}`;
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=en&client=tw-ob`;
 
     currentAudio = new Audio(url);
 
