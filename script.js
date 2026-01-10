@@ -18,34 +18,9 @@ let quizQuestions = []; // Array of { wordObj, options }
 let isIncorrectQuizMode = false; // Flag for special quiz mode
 
 // Sound Effects
-let currentSource = null;
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-// Unlock AudioContext for iOS
-const unlockAudio = () => {
-    const unlock = () => {
-        if (audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
-        // Play silent buffer
-        const buffer = audioContext.createBuffer(1, 1, 22050);
-        const source = audioContext.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioContext.destination);
-        source.start(0);
-
-        document.removeEventListener('touchstart', unlock);
-        document.removeEventListener('click', unlock);
-    };
-
-    document.addEventListener('touchstart', unlock);
-    document.addEventListener('click', unlock);
-};
-unlockAudio();
-
 const playSound = (type) => {
-    if (audioContext.state === 'suspended') audioContext.resume();
-
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
 
@@ -73,51 +48,79 @@ const playSound = (type) => {
     }
 };
 
-const speak = async (text) => {
-    // 1. Stop any currently playing audio
-    if (currentSource) {
-        try { currentSource.stop(); } catch (e) { }
-        currentSource = null;
-    }
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
+let speechVoices = [];
+let currentUtterance = null; // Global reference to prevent GC on Android
+
+
+const initVoices = () => {
+    speechVoices = window.speechSynthesis.getVoices();
+};
+
+if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = initVoices;
+    initVoices();
+}
+
+const speak = (text) => {
+    if (!('speechSynthesis' in window)) return;
+
+    // Refresh voices if empty (common on Android Chrome)
+    if (speechVoices.length === 0) {
+        speechVoices = window.speechSynthesis.getVoices();
     }
 
-    // 2. Try AudioContext Playback (Works on iOS Silent Mode)
-    const wordKey = text.toLowerCase().trim();
-    const url = `https://ssl.gstatic.com/dictionary/static/sounds/oxford/${wordKey}--_us_1.mp3`;
+    // Samsung/Android fix: Always resume before speaking to clear any stuck state
+    window.speechSynthesis.resume();
 
-    const playFallback = () => {
-        console.warn("Audio Context failed, switching to local backup");
-        if ('speechSynthesis' in window) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
-            utterance.rate = 1.0;
-            window.speechSynthesis.speak(utterance);
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    // Small delay before speak (essential for some Android versions)
+    setTimeout(() => {
+        currentUtterance = new SpeechSynthesisUtterance(text);
+
+        // Normalize language string
+        const normalizeLang = (l) => l.toLowerCase().replace('_', '-');
+
+        // Target English voices
+        let englishVoices = speechVoices.filter(v =>
+            normalizeLang(v.lang).includes('en-US') ||
+            normalizeLang(v.lang).includes('en-GB')
+        );
+
+        // Fallback if no specific English voices found, just use default
+        if (englishVoices.length === 0) {
+            englishVoices = speechVoices.filter(v => normalizeLang(v.lang).startsWith('en'));
         }
-    };
 
-    try {
-        if (audioContext.state === 'suspended') await audioContext.resume();
+        if (englishVoices.length > 0) {
+            // Priority: Samsung voices (for Samsung phones), then Google, then others
+            const bestVoice = englishVoices.find(v => v.name.includes('Samsung')) ||
+                englishVoices.find(v => v.name.includes('Google')) ||
+                englishVoices.find(v => v.name.includes('Premium')) ||
+                englishVoices.find(v => v.name.includes('Enhanced')) ||
+                englishVoices.find(v => v.name.includes('Natural')) ||
+                englishVoices.find(v => v.name.includes('Samantha')) ||
+                englishVoices[0];
 
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Network response was not ok");
+            currentUtterance.voice = bestVoice;
+        }
 
-        const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        currentUtterance.lang = 'en-US';
+        currentUtterance.rate = 0.95;
+        currentUtterance.pitch = 1.0;
 
-        const source = audioContext.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(audioContext.destination);
+        // Prevent GC during speech
+        currentUtterance.onend = () => {
+            currentUtterance = null;
+        };
+        currentUtterance.onerror = (e) => {
+            console.error('SpeechSynthesis error:', e);
+            currentUtterance = null;
+        };
 
-        currentSource = source;
-        source.onended = () => { currentSource = null; };
-        source.start(0);
-
-    } catch (error) {
-        console.error("Playback Error:", error);
-        playFallback();
-    }
+        window.speechSynthesis.speak(currentUtterance);
+    }, 100); // 100ms delay for better reliability on Samsung
 };
 
 // Utils
