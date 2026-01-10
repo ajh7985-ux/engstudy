@@ -18,10 +18,34 @@ let quizQuestions = []; // Array of { wordObj, options }
 let isIncorrectQuizMode = false; // Flag for special quiz mode
 
 // Sound Effects
-let currentAudio = null;
+let currentSource = null;
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
+// Unlock AudioContext for iOS
+const unlockAudio = () => {
+    const unlock = () => {
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+        // Play silent buffer
+        const buffer = audioContext.createBuffer(1, 1, 22050);
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        source.start(0);
+
+        document.removeEventListener('touchstart', unlock);
+        document.removeEventListener('click', unlock);
+    };
+
+    document.addEventListener('touchstart', unlock);
+    document.addEventListener('click', unlock);
+};
+unlockAudio();
+
 const playSound = (type) => {
+    if (audioContext.state === 'suspended') audioContext.resume();
+
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
 
@@ -49,34 +73,51 @@ const playSound = (type) => {
     }
 };
 
-const speak = (text) => {
+const speak = async (text) => {
     // 1. Stop any currently playing audio
-    if (currentAudio) {
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
+    if (currentSource) {
+        try { currentSource.stop(); } catch (e) { }
+        currentSource = null;
     }
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
     }
 
-    // 2. Use Google Translate TTS (US English)
-    // client=tw-ob allows access without captcha
-    const encodedText = encodeURIComponent(text);
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=en&client=tw-ob`;
+    // 2. Try AudioContext Playback (Works on iOS Silent Mode)
+    const wordKey = text.toLowerCase().trim();
+    const url = `https://ssl.gstatic.com/dictionary/static/sounds/oxford/${wordKey}--_us_1.mp3`;
 
-    currentAudio = new Audio(url);
-
-    // 3. Play with Fallback
-    currentAudio.play().catch(e => {
-        console.warn("Audio stream failed, switching to local backup:", e);
-        // Fallback to local SpeechSynthesis if offline or blocked
+    const playFallback = () => {
+        console.warn("Audio Context failed, switching to local backup");
         if ('speechSynthesis' in window) {
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US';
             utterance.rate = 1.0;
             window.speechSynthesis.speak(utterance);
         }
-    });
+    };
+
+    try {
+        if (audioContext.state === 'suspended') await audioContext.resume();
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Network response was not ok");
+
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+
+        currentSource = source;
+        source.onended = () => { currentSource = null; };
+        source.start(0);
+
+    } catch (error) {
+        console.error("Playback Error:", error);
+        playFallback();
+    }
 };
 
 // Utils
