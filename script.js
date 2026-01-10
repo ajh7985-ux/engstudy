@@ -7,7 +7,6 @@ const screens = {
     mastered: document.getElementById('mastered-screen'),
     incorrect: document.getElementById('incorrect-note-screen')
 };
-const ttsAudio = document.getElementById('tts-audio');
 
 // State
 let currentLevel = 'easy';
@@ -21,81 +20,107 @@ let isIncorrectQuizMode = false; // Flag for special quiz mode
 // Sound Effects
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-const playSound = async (type) => {
-    try {
-        if (audioContext.state === 'suspended') {
-            await audioContext.resume();
-        }
+const playSound = (type) => {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
 
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
 
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        if (type === 'correct') {
-            // Ding
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.1);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.5);
-        } else if (type === 'wrong') {
-            // Beep
-            oscillator.type = 'sawtooth';
-            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-            oscillator.frequency.linearRampToValueAtTime(100, audioContext.currentTime + 0.3);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.3);
-        }
-    } catch (e) {
-        console.error('AudioContext error:', e);
+    if (type === 'correct') {
+        // Ding (High pitch sine)
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.5);
+    } else if (type === 'wrong') {
+        // Beep (Low pitch saw/square)
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+        oscillator.frequency.linearRampToValueAtTime(100, audioContext.currentTime + 0.3);
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.3);
     }
 };
 
-// Google TTS will be used for consistent pronunciation
-let currentAudio = null;
+let speechVoices = [];
+let currentUtterance = null; // Global reference to prevent GC on Android
 
-const speak = async (text) => {
-    try {
-        // Resume context on user gesture
-        if (audioContext.state === 'suspended') {
-            await audioContext.resume();
-        }
 
-        if (ttsAudio) {
-            ttsAudio.pause();
-            ttsAudio.src = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=gtx`;
-
-            ttsAudio.play().catch(e => {
-                console.warn('Google TTS element play failed, trying Web Speech API:', e);
-                fallbackSpeak(text);
-            });
-        } else {
-            fallbackSpeak(text);
-        }
-    } catch (e) {
-        console.error('Speak error:', e);
-    }
+const initVoices = () => {
+    speechVoices = window.speechSynthesis.getVoices();
 };
 
-const fallbackSpeak = (text) => {
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        const voices = window.speechSynthesis.getVoices();
-        const englishVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google')) || voices.find(v => v.lang.startsWith('en'));
-        if (englishVoice) utterance.voice = englishVoice;
-        window.speechSynthesis.speak(utterance);
-    } else {
-        const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=gtx`;
-        window.open(url, '_blank');
+if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = initVoices;
+    initVoices();
+}
+
+const speak = (text) => {
+    if (!('speechSynthesis' in window)) return;
+
+    // Refresh voices if empty (common on Android Chrome)
+    if (speechVoices.length === 0) {
+        speechVoices = window.speechSynthesis.getVoices();
     }
+
+    // Samsung/Android fix: Always resume before speaking to clear any stuck state
+    window.speechSynthesis.resume();
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    // Small delay before speak (essential for some Android versions)
+    setTimeout(() => {
+        currentUtterance = new SpeechSynthesisUtterance(text);
+
+        // Normalize language string
+        const normalizeLang = (l) => l.toLowerCase().replace('_', '-');
+
+        // Target English voices
+        let englishVoices = speechVoices.filter(v =>
+            normalizeLang(v.lang).includes('en-US') ||
+            normalizeLang(v.lang).includes('en-GB')
+        );
+
+        // Fallback if no specific English voices found, just use default
+        if (englishVoices.length === 0) {
+            englishVoices = speechVoices.filter(v => normalizeLang(v.lang).startsWith('en'));
+        }
+
+        if (englishVoices.length > 0) {
+            // Priority: Samsung voices (for Samsung phones), then Google, then others
+            const bestVoice = englishVoices.find(v => v.name.includes('Samsung')) ||
+                englishVoices.find(v => v.name.includes('Google')) ||
+                englishVoices.find(v => v.name.includes('Premium')) ||
+                englishVoices.find(v => v.name.includes('Enhanced')) ||
+                englishVoices.find(v => v.name.includes('Natural')) ||
+                englishVoices.find(v => v.name.includes('Samantha')) ||
+                englishVoices[0];
+
+            currentUtterance.voice = bestVoice;
+        }
+
+        currentUtterance.lang = 'en-US';
+        currentUtterance.rate = 0.95;
+        currentUtterance.pitch = 1.0;
+
+        // Prevent GC during speech
+        currentUtterance.onend = () => {
+            currentUtterance = null;
+        };
+        currentUtterance.onerror = (e) => {
+            console.error('SpeechSynthesis error:', e);
+            currentUtterance = null;
+        };
+
+        window.speechSynthesis.speak(currentUtterance);
+    }, 100); // 100ms delay for better reliability on Samsung
 };
 
 // Utils
@@ -126,14 +151,6 @@ const showScreen = (screenName) => {
 // --- Initialization ---
 document.querySelectorAll('.difficulty-buttons .btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        // Sound Unlock for Mobile
-        if (audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
-        if (ttsAudio) {
-            ttsAudio.play().then(() => ttsAudio.pause()).catch(() => { });
-        }
-
         currentLevel = btn.dataset.level;
         startLearningPhase();
     });
