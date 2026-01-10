@@ -48,79 +48,33 @@ const playSound = (type) => {
     }
 };
 
-let speechVoices = [];
-let currentUtterance = null; // Global reference to prevent GC on Android
-
-
-const initVoices = () => {
-    speechVoices = window.speechSynthesis.getVoices();
-};
-
-if ('speechSynthesis' in window) {
-    window.speechSynthesis.onvoiceschanged = initVoices;
-    initVoices();
-}
+let currentAudio = null;
 
 const speak = (text) => {
-    if (!('speechSynthesis' in window)) return;
-
-    // Refresh voices if empty (common on Android Chrome)
-    if (speechVoices.length === 0) {
-        speechVoices = window.speechSynthesis.getVoices();
+    // 1. Stop any existing browser TTS (just in case)
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
     }
 
-    // Samsung/Android fix: Always resume before speaking to clear any stuck state
-    window.speechSynthesis.resume();
+    // 2. Stop any currently playing audio file (prevent overlapping)
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+    }
 
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
+    // 3. Create new Audio object with Google TTS URL
+    const encodedText = encodeURIComponent(text);
+    // client=tw-ob is the public endpoint used by Google Translate
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodedText}`;
 
-    // Small delay before speak (essential for some Android versions)
-    setTimeout(() => {
-        currentUtterance = new SpeechSynthesisUtterance(text);
+    currentAudio = new Audio(url);
 
-        // Normalize language string
-        const normalizeLang = (l) => l.toLowerCase().replace('_', '-');
-
-        // Target English voices
-        let englishVoices = speechVoices.filter(v =>
-            normalizeLang(v.lang).includes('en-US') ||
-            normalizeLang(v.lang).includes('en-GB')
-        );
-
-        // Fallback if no specific English voices found, just use default
-        if (englishVoices.length === 0) {
-            englishVoices = speechVoices.filter(v => normalizeLang(v.lang).startsWith('en'));
-        }
-
-        if (englishVoices.length > 0) {
-            // Priority: Samsung voices (for Samsung phones), then Google, then others
-            const bestVoice = englishVoices.find(v => v.name.includes('Samsung')) ||
-                englishVoices.find(v => v.name.includes('Google')) ||
-                englishVoices.find(v => v.name.includes('Premium')) ||
-                englishVoices.find(v => v.name.includes('Enhanced')) ||
-                englishVoices.find(v => v.name.includes('Natural')) ||
-                englishVoices.find(v => v.name.includes('Samantha')) ||
-                englishVoices[0];
-
-            currentUtterance.voice = bestVoice;
-        }
-
-        currentUtterance.lang = 'en-US';
-        currentUtterance.rate = 0.95;
-        currentUtterance.pitch = 1.0;
-
-        // Prevent GC during speech
-        currentUtterance.onend = () => {
-            currentUtterance = null;
-        };
-        currentUtterance.onerror = (e) => {
-            console.error('SpeechSynthesis error:', e);
-            currentUtterance = null;
-        };
-
-        window.speechSynthesis.speak(currentUtterance);
-    }, 100); // 100ms delay for better reliability on Samsung
+    // 4. Play
+    currentAudio.play().catch(e => {
+        console.error("Audio playback failed:", e);
+        // Optional: Alert the user if it fails (e.g. no internet)
+        // alert("오디오 재생 실패. 인터넷 연결을 확인해주세요.");
+    });
 };
 
 // Utils
